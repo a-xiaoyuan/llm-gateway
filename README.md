@@ -53,13 +53,13 @@ mvn -q package -DskipTests
 终端 1，启动模拟上游（端口 9090）：
 
 ```sh
-java -jar target/llm-gateway-0.1.0-SNAPSHOT.jar --spring.profiles.active=mock
+java -jar mock-upstream/target/mock-upstream-0.1.0-SNAPSHOT.jar
 ```
 
 终端 2，启动网关（端口 8787）：
 
 ```sh
-java -jar target/llm-gateway-0.1.0-SNAPSHOT.jar
+java -jar gateway/target/llm-gateway-0.1.0-SNAPSHOT.jar
 ```
 
 终端 3，发一个请求：
@@ -73,6 +73,14 @@ curl -s http://localhost:8787/v1/chat/completions \
 把 `model` 换成 `mock-429`、`mock-500`、`mock-slow` 可以模拟上游故障。
 
 **接真实模型：** 启动网关前设置环境变量 `UPSTREAM_BASE_URL`（到 `/v1` 为止）和 `UPSTREAM_API_KEY`。
+
+## 项目结构
+
+```
+gateway/          网关本体，按功能分包（proxy、common，后续 auth、ratelimit、routing ……）
+mock-upstream/    模拟上游：OpenAI 格式的假模型服务，可注入故障
+docs/             设计文档
+```
 
 ## 测试
 

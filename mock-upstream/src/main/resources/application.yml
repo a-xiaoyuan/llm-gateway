@@ -1,0 +1,13 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: mock-upstream
+  threads:
+    virtual:
+      enabled: true
+
+mock:
+  # 正常请求的固定延迟，模拟模型生成耗时
+  latency-ms: 200

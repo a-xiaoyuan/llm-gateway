@@ -325,16 +325,36 @@ Redis：限流令牌桶、用量队列（Stream）、审批挂起状态。
 
 ```
 llm-gateway/
-├── kit-ratelimit/            共用组件
-├── kit-llm-guard/
-├── kit-reliable-consumer/
-├── kit-audit/
-├── gateway-app/              网关本体（现在的代码搬到这里）
-├── deploy/                   docker-compose：Redis、MySQL、Prometheus、Grafana
+├── pom.xml                      父工程：统一管理模块和依赖版本
+├── gateway/                     网关本体（能运行的程序）
+│   └── io/github/axiaoyuan/llmgateway/
+│       ├── GatewayApplication.java
+│       ├── proxy/               转发（功能 1、5）       ← 已有
+│       ├── common/              少量公共代码，如错误格式 ← 已有
+│       ├── observe/             指标（功能 2）
+│       ├── auth/                鉴权（功能 3）
+│       ├── ratelimit/           限流接入（功能 4，调用组件）
+│       ├── routing/             选渠道、故障切换（功能 6）
+│       ├── provider/            厂商适配：openai/、anthropic/（功能 6、7）
+│       ├── billing/             记账（功能 8）
+│       ├── tool/                工具调用网关（功能 10）
+│       └── admin/               管理接口
+├── kits/                        共用组件（Spring Boot starter），做到对应功能时再建
+│   ├── kit-ratelimit/
+│   ├── kit-llm-guard/
+│   ├── kit-reliable-consumer/
+│   └── kit-audit/
+├── mock-upstream/               模拟上游，独立的程序                 ← 已有
+├── deploy/                      docker-compose、Grafana 面板
 └── docs/
 ```
 
-现在还是单模块，做到功能 4 时再拆。
+**三条原则：**
+1. **按功能分包，不按层分包。** 不建 `controller/`、`service/`、`dao/` 三个大目录；一个功能的代码在一个包里。
+2. **包内的类默认不公开。** 每个包只公开必要的入口，其余用包级可见性，别的包没法乱调用。
+3. **依赖单向。** 组件不依赖网关；拆成 Maven 模块后由编译器保证。
+
+**命名：** groupId `io.github.a-xiaoyuan`，包名 `io.github.axiaoyuan.llmgateway`（包名不能有连字符）。
 
 ## 8. 性能目标（要压测验证，不是结论）
 
