@@ -98,6 +98,14 @@ sequenceDiagram
 
 **坑：** 标签里放 key 要小心，Key 多了时间序列会爆（高基数问题）。只放 key 的 ID，不放明文；Key 数量很大时改为只统计前 N 名。
 
+**已实现（功能 2）：** `gateway_requests_total{model,status,outcome}`、`gateway_request_duration_seconds`、`gateway_upstream_duration_seconds`、`gateway_overhead_seconds`、`gateway_tokens_total{model,type}`。表里其余的标签和指标随对应功能加入：key 随鉴权（3），限流拒绝随限流（4），channel、故障切换、熔断随多上游（6），花费随记账（8）。
+
+- `outcome` 比状态码更直接：success / upstream_error（上游 4xx、5xx 透传）/ upstream_timeout（504）/ upstream_unavailable（502）。
+- 读 `model` 和响应里的 `usage` 用 Jackson 流式解析，只看顶层字段，命中就停，不把整个请求体解析成树。
+- `model` 来自客户端，可以乱填。用 `MeterFilter.maximumAllowableTags` 限制最多 50 个不同值，超出的不再生成时间序列，转发不受影响。有了模型配置（功能 6）后改为只认配置里的模型。
+- 直方图桶范围自己定：总耗时和上游耗时 5ms ~ 5 分钟（模型生成可能超过默认上限 30 秒），网关自身耗时 50µs ~ 1 秒（默认从 1ms 起，看不出差别）。
+- 基线压测数字见 README“性能基线”。
+
 **部署：** Prometheus、Grafana 用 Docker Compose 一键起，面板 JSON 放仓库。
 
 ### 功能 3：API Key 鉴权
@@ -331,7 +339,7 @@ llm-gateway/
 │       ├── GatewayApplication.java
 │       ├── proxy/               转发（功能 1、5）       ← 已有
 │       ├── common/              少量公共代码，如错误格式 ← 已有
-│       ├── observe/             指标（功能 2）
+│       ├── observe/             指标（功能 2）           ← 已有
 │       ├── auth/                鉴权（功能 3）
 │       ├── ratelimit/           限流接入（功能 4，调用组件）
 │       ├── routing/             选渠道、故障切换（功能 6）

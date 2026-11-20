@@ -1,6 +1,12 @@
 server:
   # 不用 8080：太常见，容易和本机其他服务冲突
   port: 8787
+  tomcat:
+    # 客户端（如 Claude Code）会长时间复用同一条连接。Tomcat 默认每条连接处理 100 个请求就断开，
+    # 高并发下客户端不停重连，再叠加默认只有 100 的等待队列，Windows 上会直接拒绝连接。
+    # 基线压测（200 并发）在默认值下有 0.2% 的请求连不上，调大后为 0。
+    max-keep-alive-requests: 10000
+    accept-count: 1000
 
 spring:
   application:
@@ -20,3 +26,16 @@ gateway:
     api-key: ${UPSTREAM_API_KEY:mock-key}
     connect-timeout: 2s
     read-timeout: 120s
+  metrics:
+    # model 标签最多保留多少个不同的值，防止客户端乱填模型名撑爆 Prometheus
+    max-models: 50
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只暴露健康检查和 Prometheus 抓取端点
+        include: health,prometheus
+  metrics:
+    tags:
+      application: llm-gateway

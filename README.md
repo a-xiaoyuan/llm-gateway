@@ -4,7 +4,7 @@
 
 Java 21 · Spring Boot 3.5 · 虚拟线程 · Redis · MySQL · Prometheus / Grafana
 
-> 🚧 开发中。目前完成：非流式转发与模拟上游。进度见下方[路线](#路线)，完整设计见 [docs/design.md](docs/design.md)。
+> 🚧 开发中。目前完成：非流式转发、模拟上游、可观测面板。进度见下方[路线](#路线)，完整设计见 [docs/design.md](docs/design.md)。
 
 ## 它解决什么问题
 
@@ -30,7 +30,7 @@ Claude Code / Codex / 业务程序 ──→ llm-gateway ──→ DeepSeek / �
 | --- | --- | --- |
 | 转发 | OpenAI 兼容接口原样转发；连接 / 读取超时分开；上游错误码透传（连不上 502、超时 504）；客户端 Key 不外传 | ✅ |
 | 模拟上游 | 内置假模型服务，可注入 429 / 500 / 超时，压测和故障演练不花钱 | ✅ |
-| 可观测 | 请求量、错误率、P99、网关自身耗时、按人 token 与花费，Grafana 面板 | ⏳ |
+| 可观测 | 请求量、错误率、P50 / P95 / P99、网关自身耗时、按模型 token 用量，Grafana 面板；模型标签数量有上限，防止乱填撑爆 Prometheus（按人用量和花费随鉴权、记账加入） | ✅ |
 | 鉴权 | 网关 Key 只存哈希，按 Key 配额度与可用模型 | ⏳ |
 | 限流 | Redis + Lua 令牌桶，按请求数和按 token；token 先预扣、后按实际用量结算 | ⏳ |
 | 流式 | SSE 透传，客户端断开即停止上游，流式用量结算 | ⏳ |
@@ -74,11 +74,35 @@ curl -s http://localhost:8787/v1/chat/completions \
 
 **接真实模型：** 启动网关前设置环境变量 `UPSTREAM_BASE_URL`（到 `/v1` 为止）和 `UPSTREAM_API_KEY`。
 
+**看面板**（需要 Docker）：
+
+```sh
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+打开 http://localhost:3000 就是网关面板（匿名只读）。Prometheus 在 http://localhost:9091 ，指标原文在 http://localhost:8787/actuator/prometheus 。
+
+## 性能基线
+
+网关 + 模拟上游（固定 200ms 延迟），200 个并发用户连续请求 60 秒，[k6](https://k6.io) 脚本见 [bench/chat-baseline.js](bench/chat-baseline.js)。
+
+| | 吞吐 | 失败率 | P50 | P95 | P99 |
+| --- | --- | --- | --- | --- | --- |
+| 直连模拟上游（对照） | 950 req/s | 0 | 214.3 ms | 217.3 ms | 219.0 ms |
+| 经过网关 | 918 req/s | 0 | 216.7 ms | 223.9 ms | 246.8 ms |
+
+- 网关代码自身耗时（解析模型名、记指标、组装响应）P99 < 0.05 ms，低于直方图最小桶。
+- 端到端多出的延迟（P50 +2.4 ms，P99 +28 ms）主要在网关到上游的那一跳：网关测到的上游耗时 P99 是 242 ms，直连是 219 ms。
+- 条件：AMD Ryzen 7 8745HS（8 核 16 线程）、36 GB 内存、Windows 11；k6、网关、模拟上游跑在同一台机器上，互相抢 CPU，数字只用于前后对比。
+- Tomcat 默认参数下同样的压测有 0.2% 的请求连不上（每条连接 100 个请求后断开 + 等待队列只有 100），调大 `max-keep-alive-requests` 和 `accept-count` 后为 0。
+
 ## 项目结构
 
 ```
-gateway/          网关本体，按功能分包（proxy、common，后续 auth、ratelimit、routing ……）
+gateway/          网关本体，按功能分包（proxy、observe、common，后续 auth、ratelimit、routing ……）
 mock-upstream/    模拟上游：OpenAI 格式的假模型服务，可注入故障
+deploy/           Prometheus + Grafana（docker compose），面板随容器自动加载
+bench/            k6 压测脚本
 docs/             设计文档
 ```
 
@@ -88,7 +112,7 @@ docs/             设计文档
 mvn test
 ```
 
-测试里用 JDK 自带的 `HttpServer` 起一个可控的假上游，覆盖正常转发、错误透传、超时、上游不可用和密钥不外传。
+测试里用 JDK 自带的 `HttpServer` 起一个可控的假上游，覆盖正常转发、错误透传、超时、上游不可用和密钥不外传；指标测试直接读 `/actuator/prometheus`，检查请求数、token、直方图和模型标签上限。
 
 ## 路线
 

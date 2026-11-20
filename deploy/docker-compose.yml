@@ -1,0 +1,31 @@
+# 可观测面板：Prometheus 定时去网关抓指标，Grafana 把指标画成图。
+# 网关和模拟上游直接在本机跑（java -jar），这里只起这两个容器。
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#   Grafana:    http://localhost:3000   （已开匿名只读，打开就能看面板）
+#   Prometheus: http://localhost:9091
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports:
+      # 9090 留给模拟上游
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      # Linux 上的 Docker 没有 host.docker.internal，这行补上；Windows / macOS 自带
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/llm-gateway.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

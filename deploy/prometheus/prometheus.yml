@@ -1,0 +1,10 @@
+global:
+  # 每 5 秒抓一次：本地演示和压测时曲线更灵敏，生产一般 15s～30s
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: llm-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # 网关跑在宿主机的 8787 端口
+      - targets: ["host.docker.internal:8787"]

@@ -1,5 +1,9 @@
 server:
   port: 9090
+  tomcat:
+    # 压测时别让模拟上游自己先成为瓶颈（原因见 gateway 的 application.yml）
+    max-keep-alive-requests: 10000
+    accept-count: 1000
 
 spring:
   application:
